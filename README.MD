@@ -1,0 +1,26 @@
+# Keystroke Injection and Extraction
+1. Setting up the **Chrome Browser Extension** to inject keystrokes
+2. Starting the **Web-App** that detects and stores keystrokes
+3. Running the **Feature Extraction** script
+
+## Chrome Broswer Extension
+The Chrome Broswer Extension injects keystrokes. Currently, when you type any number keys, it simulates keydown and keyup of key 'q'. 
+1. Go to ```chrome://extensions/``` on Google Chrome browser.
+2. Toggle ```developer mode``` on.
+3. Click ```Load unpacked``` and select ```key_inject_brows_extension``` folder.
+
+## Web-App
+The Web-App consists a server that stores your keystrokes every 10 seconds and stores it inside ```keystrokes.csv``` file.
+1. Create virtual environment to run the python server.
+    * ```rm -rf venv```
+    * ```python3 -m venv venv```
+    * Linux or Mac: ```source venv/bin/activate``` Windows: ```venv\Scripts\activate```
+2. Install requirements in venv ```pip install -r requirements.txt```.
+3. Run the server ```python backend.py```.
+4. Open ```index.html```.
+5. Any keystrokes made to this web-app is stored into ```keystrokes.csv``` file.
+
+## Feature Extraction
+After collecting keystrokes (```keystrokes.csv```), keystroke features can be extracted with ```keystroke_extraction.py```.
+1. Run ```python feature_extraction.py```.
+2. Keystroke features are extracted into ```keystroke_features.csv``` file.
