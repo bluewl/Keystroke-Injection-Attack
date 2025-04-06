@@ -16,7 +16,8 @@ import keras
 from keras import layers
 from tqdm import tqdm
 
-
+#global variable that holds all user galleries
+user_galleries= {}
 
 def create_LSTM_network(input_shape):
     input = layers.Input(shape=input_shape)
@@ -84,7 +85,7 @@ def create_LSTM_constrastive(input_shape):
     # Define the model
     model = keras.Model(inputs=[input_1, input_2], outputs=distance)
 
-    return model
+    return model , base_model
 
 def triplet_loss(margin=1.0):
 
@@ -122,14 +123,95 @@ def create_LSTM_triplet(input_shape):
 
     # Create the model
     model = keras.Model(inputs=[anchor_input, positive_input, negative_input], outputs=merged_output)
-    return model
+    return model , base_model
+
+#embedding distance between two sequences(todo: possibly extend to multiple sequences)
+def embedding_distance(model,seq_1,seq_2):
+    embed_1 = model(np.array([seq_1])) if seq_1.ndim==2 else model(seq_1)
+    #embed_1 = model(np.array([seq_1]))
+    embed_2 = model(np.array([seq_2])) if seq_1.ndim==2 else model(seq_2)
+    #embed_2 = model(seq_2)
+    # Compute the Euclidean distance between embeddings
+    dist = keras.ops.sqrt(keras.ops.sum(keras.ops.square(embed_1-embed_2), axis=-1))
+    print(dist)
+    print("reeeturninnngg")
+    result = dist.numpy()[0] if len(dist.numpy())==1 else dist.numpy()
+    return result 
+
+def is_user(model,test_sample,gallery,threshold=1):
+    dist = 0
+    num_gal = len(gallery)
+    for sample in gallery:
+        dist += embedding_distance(test_sample,sample) 
+    avg_dist=dist/num_gal
+    if (avg_dist<=threshold):
+        return True
+    return False
+
+#test_samples contains 5 same user and rest different users
+def compute_FPR_FNR(model,test_samples,alleged_users,threshold=1):
+    positive_samples = 5
+    negative_samples = len(test_samples) -5
+    true_positives = 0
+    false_postives = 0
+    true_negatives = 0
+    false_negatives = 0 
+    for i in range(5):
+        if is_user(model,test_samples[i],user_galleries[alleged_users[i]],threshold):
+            true_positives += 1
+        else:
+            false_negatives += 1
+    for j in range(5,len(test_samples)):
+        if is_user(model,test_samples[j],user_galleries[alleged_users[j]],threshold):
+            false_positives += 1
+        else:
+            true_negatives += 1
+    #todo: calculate false positive rate
+    false_positive_rate = false_positives/(false_positives+true_negatives)
+    false_negative_rate = false_negatives/(false_negatives+true_positives)
+    return (false_positive_rate,false_negative_rate)
+
+#takes in dictionaries mapping users to their test_samples and alleged users
+def compute_avg_FPR_FNR(model,test_samples_dict,alleged_users_dict,threshold=1):
+    avg_FPR = 0
+    avg_FNR = 0
+    num_users = len(test_samples_dict.keys())
+    for user in test_samples_dict.keys():
+        temp_FPR,temp_FNR = compute_FPR_FNR(model,test_samples_dict[user],alleged_users_dict[user],threshold)
+        avg_FPR += temp_FPR
+        avg_FNR += temp_FNR
+
+    avg_FPR /= num_users
+    avg_FNR /= num_users
+    return (avg_FPR,avg_FNR,abs(avg_FPR-avg_FNR))
+
+def compute_EER(model,test_samples_dict,alleged_users_dict):
+    thresholds = np.linspace(0,2,2000) #should this be the right threshold?
+    lst = []
+    min_diff = -5
+    best_FPR = -5
+    best_FNR = -5
+    for threshold in thresholds:
+        diff,temp_FPR,temp_FNR = compute_avg_FPR_FNR(model,test_samples_dict,alleged_users_dict,threshold)
+        if min_diff == -5 or diff < min_diff:
+            min_diff = diff
+            best_FPR = temp_FPR
+            best_FNR = temp_FNR
+
+    return (best_FPR+best_FNR)/2 #can also return best_FNR, or best FPR    
 
 
-# tens = np.array([[1,2,3],[4,5,6],[7,8,9]])
-# a,b,c = tf.split(tens,3,axis=0)
-# print(a)
-# a,b,c = tf.split(tens,3,axis=1)
-# print(a)
+
+tens = np.array([[1,2,3],[4,5,6],[7,8,9]])
+a,b,c = tf.split(tens,3,axis=0)
+print(a)
+a,b,c = tf.split(tens,3,axis=1)
+print(a)
+print(b)
+print("fml")
+print(a-b)
+print(keras.ops.sqrt(keras.ops.sum(keras.ops.square(a-b), axis=-1)))
+print("kms myself")
 
 seq_len = 70
 num_features = 5
@@ -147,9 +229,16 @@ y_test = np.random.randint(low=1,high=num_users_softmax,size=num_users_softmax*1
 
 padded_x_train = keras.utils.pad_sequences(x_train, padding='post', dtype='float32', value=0)
 
+
+print("kmsksmksmksksm")
+saved_model= keras.models.load_model("base_saved_model.keras")
+print(embedding_distance(saved_model,np.array(x_train[0]),np.array(x_train[2])))
+print("reeeeeeeeeeeeeeeeeeeeeeeee")
+
 # kek = [[[1,2,3],[2,3,4],[5,5,6]],[[1,2,3],[2,3,4],[5,5,6]],[[1,2,3],[2,3,4]]]
 # padded_kek = keras.utils.pad_sequences(kek, padding='post',maxlen=5, dtype='float32', value=0)
 # print(padded_kek)
+
 
 model = create_LSTM_softmax_network(input_shape=input_shape,num_users=num_users_softmax)
 #print(model.summary())
@@ -157,10 +246,12 @@ optimizer = keras.optimizers.Adam(learning_rate=0.05,beta_1=0.9,beta_2=0.999,eps
 model.compile(optimizer=optimizer,loss='categorical_crossentropy',metrics=['accuracy'])
 # model.fit(x_train,y_train,epochs=200,steps_per_epoch=150,batch_size=512)
 
-model_1 = create_LSTM_triplet(input_shape=input_shape)
+model_1 , base_model = create_LSTM_triplet(input_shape=input_shape)
 print(model_1.summary())
 
 model_1.save("saved_model.keras")
+base_model.save("base_saved_model.keras")
+
 
 model_2 = keras.models.load_model("saved_model.keras")
 print(model_2.summary())
@@ -206,7 +297,8 @@ class BalancedPairGenerator(keras.utils.Sequence):
         batch_x2 = batch_x2[indices]
         batch_y = batch_y[indices]
 
-        return [batch_x1, batch_x2], batch_y
+        #return [batch_x1, batch_x2], batch_y
+        return (batch_x1, batch_x2), batch_y
 
     def on_epoch_end(self):
         # Shuffle the indexes at the end of each epoch to ensure randomness in the next epoch
@@ -219,19 +311,22 @@ class BalancedPairGenerator(keras.utils.Sequence):
 x1 = x_train  
 x2 = x_train
 x3 = x_train
-y = np.random.randint(low=0,high=1,size=num_users_softmax*15)  # Labels (0 for same user, 1 for different users)
+y = np.random.randint(low=0,high=2,size=num_users_softmax*15)  # Labels (0 for same user, 1 for different users)
 
 #contrastive loss
 
-# batch_size = 32
-# pair_generator = BalancedPairGenerator(x1, x2, y, batch_size)
-# model = create_LSTM_constrastive(input_shape=input_shape)
-# model.compile(optimizer='adam', loss=contrastive_loss(margin=1.0))
-# model.fit(pair_generator, epochs=30)
+#batch_size = 32
+print(y)
+batch_size = 512
+pair_generator = BalancedPairGenerator(x1, x2, y, batch_size)
+print(pair_generator)
+model, base_model = create_LSTM_constrastive(input_shape=input_shape)
+model.compile(optimizer='adam', loss=contrastive_loss(margin=1.0))
+model.fit(pair_generator, epochs=30)
 
 #triplet loss
-model = create_LSTM_triplet(input_shape=input_shape)
-model.compile(optimizer='adam',loss=triplet_loss(margin=1.0))
-print(model.summary())
-#model.fit(x=np.array([x1,x2,x3]),y=None,epochs=200,steps_per_epoch=150,batch_size=512)
-model.fit(x=[x1,x2,x3],y=y,epochs=200,steps_per_epoch=150,batch_size=512)
+# model ,base_model = create_LSTM_triplet(input_shape=input_shape)
+# model.compile(optimizer='adam',loss=triplet_loss(margin=1.0))
+# print(model.summary())
+# model.fit(x=np.array([x1,x2,x3]),y=None,epochs=200,steps_per_epoch=150,batch_size=512)
+# model.fit(x=[x1,x2,x3],y=y,epochs=200,steps_per_epoch=150,batch_size=512)
