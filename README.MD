@@ -15,7 +15,7 @@ The Web-App consists a server that stores your keystrokes every 10 seconds and s
     * ```rm -rf venv```
     * ```python3 -m venv venv```
     * Linux or Mac: ```source venv/bin/activate``` Windows: ```venv\Scripts\activate```
-2. Install requirements in venv ```pip install -r requirements.txt```.
+2. Install requirements in venv ```pip install -r requirements.txt``` or ```pip3 install -r requirements.txt```.
 3. Run the server ```python backend.py```.
 4. Open ```index.html```.
 5. Any keystrokes made to this web-app is stored into ```keystrokes.csv``` file.
