@@ -15,22 +15,28 @@ import tensorflow as tf
 import keras
 from keras import layers
 from tqdm import tqdm
+import datetime
+import pytz
 
 #global variable that holds all user galleries
 user_galleries= {}
 
+#try removing recurrent dropout for speedups (CuDNN acceleration)
 def create_LSTM_network(input_shape):
     input = layers.Input(shape=input_shape)
     #input = layers.Input(shape=(input_shape,5))
     #masked = layers.Masking(mask_value=-1.0)(input)
     masked = layers.Masking(mask_value=-1.0)(input)
     normalized_masked = layers.BatchNormalization()(masked)
+    # first_LSTM = layers.LSTM(units=128,activation="tanh",
+    # recurrent_activation="sigmoid",dropout=0.5,recurrent_dropout=0.2,return_sequences=True)(normalized_masked)
     first_LSTM = layers.LSTM(units=128,activation="tanh",
-    recurrent_activation="sigmoid",dropout=0.5,recurrent_dropout=0.2,return_sequences=True)(normalized_masked)
-
+    recurrent_activation="sigmoid",dropout=0.5,return_sequences=True)(normalized_masked)
     normalized_first_LSTM = layers.BatchNormalization()(first_LSTM)
+    # second_LSTM = layers.LSTM(units=128,activation="tanh",
+    # recurrent_activation="sigmoid",recurrent_dropout=0.2)(normalized_first_LSTM)
     second_LSTM = layers.LSTM(units=128,activation="tanh",
-    recurrent_activation="sigmoid",recurrent_dropout=0.2)(normalized_first_LSTM)
+    recurrent_activation="sigmoid")(normalized_first_LSTM)
     return keras.Model(input, second_LSTM)
 
 
@@ -47,12 +53,15 @@ def create_LSTM_softmax_network(input_shape,num_users):
     input = layers.Input(shape=input_shape)
     masked = layers.Masking(mask_value=-1.0)(input)
     normalized_masked = layers.BatchNormalization()(masked)
+    # first_LSTM = layers.LSTM(units=128,activation="tanh",
+    # recurrent_activation="sigmoid",dropout=0.5,recurrent_dropout=0.2,return_sequences=True)(normalized_masked)
     first_LSTM = layers.LSTM(units=128,activation="tanh",
-    recurrent_activation="sigmoid",dropout=0.5,recurrent_dropout=0.2,return_sequences=True)(normalized_masked)
-
+    recurrent_activation="sigmoid",dropout=0.5,return_sequences=True)(normalized_masked)
     normalized_first_LSTM = layers.BatchNormalization()(first_LSTM)
+    # second_LSTM = layers.LSTM(units=128,activation="tanh",
+    # recurrent_activation="sigmoid",recurrent_dropout=0.2)(normalized_first_LSTM)
     second_LSTM = layers.LSTM(units=128,activation="tanh",
-    recurrent_activation="sigmoid",recurrent_dropout=0.2)(normalized_first_LSTM)
+    recurrent_activation="sigmoid")(normalized_first_LSTM)
     #logits = layers.Dense(units=num_users,activation="relu")(second_LSTM)
     outputs = layers.Dense(units=num_users,activation="softmax")(second_LSTM)
     return keras.Model(input, outputs)
@@ -133,8 +142,8 @@ def embedding_distance(model,seq_1,seq_2):
     #embed_2 = model(seq_2)
     # Compute the Euclidean distance between embeddings
     dist = keras.ops.sqrt(keras.ops.sum(keras.ops.square(embed_1-embed_2), axis=-1))
-    print(dist)
-    print("reeeturninnngg")
+    # print(dist)
+    # print("reeeturninnngg")
     result = dist.numpy()[0] if len(dist.numpy())==1 else dist.numpy()
     return result 
 
@@ -142,7 +151,7 @@ def is_user(model,test_sample,gallery,threshold=1):
     dist = 0
     num_gal = len(gallery)
     for sample in gallery:
-        dist += embedding_distance(test_sample,sample) 
+        dist += embedding_distance(model,test_sample,sample) 
     avg_dist=dist/num_gal
     if (avg_dist<=threshold):
         return True
@@ -153,16 +162,18 @@ def compute_FPR_FNR(model,test_samples,alleged_users,threshold=1):
     positive_samples = 5
     negative_samples = len(test_samples) -5
     true_positives = 0
-    false_postives = 0
+    false_positives = 0
     true_negatives = 0
     false_negatives = 0 
     for i in range(5):
+        # print(alleged_users[i])
         if is_user(model,test_samples[i],user_galleries[alleged_users[i]],threshold):
             true_positives += 1
         else:
             false_negatives += 1
     for j in range(5,len(test_samples)):
         if is_user(model,test_samples[j],user_galleries[alleged_users[j]],threshold):
+            # print(alleged_users[j])
             false_positives += 1
         else:
             true_negatives += 1
@@ -186,13 +197,14 @@ def compute_avg_FPR_FNR(model,test_samples_dict,alleged_users_dict,threshold=1):
     return (avg_FPR,avg_FNR,abs(avg_FPR-avg_FNR))
 
 def compute_EER(model,test_samples_dict,alleged_users_dict):
-    thresholds = np.linspace(0,2,2000) #should this be the right threshold?
+    #thresholds = np.linspace(0,2,2000) #should this be the right range?
+    thresholds = np.linspace(0,2,10) #budget version
     lst = []
     min_diff = -5
     best_FPR = -5
     best_FNR = -5
     for threshold in thresholds:
-        diff,temp_FPR,temp_FNR = compute_avg_FPR_FNR(model,test_samples_dict,alleged_users_dict,threshold)
+        temp_FPR,temp_FNR,diff = compute_avg_FPR_FNR(model,test_samples_dict,alleged_users_dict,threshold)
         if min_diff == -5 or diff < min_diff:
             min_diff = diff
             best_FPR = temp_FPR
@@ -216,7 +228,7 @@ print("kms myself")
 seq_len = 70
 num_features = 5
 #num_users_softmax = 10000
-num_users_softmax = 1000
+num_users_softmax = 10000
 input_shape = (seq_len,num_features)
 
 
@@ -230,31 +242,78 @@ y_test = np.random.randint(low=1,high=num_users_softmax,size=num_users_softmax*1
 padded_x_train = keras.utils.pad_sequences(x_train, padding='post', dtype='float32', value=0)
 
 
-print("kmsksmksmksksm")
-saved_model= keras.models.load_model("base_saved_model.keras")
-print(embedding_distance(saved_model,np.array(x_train[0]),np.array(x_train[2])))
-print("reeeeeeeeeeeeeeeeeeeeeeeee")
+#print("kmsksmksmksksm")
+#saved_model= keras.models.load_model("base_saved_model.keras")
+#print(embedding_distance(saved_model,np.array(x_train[0]),np.array(x_train[2])))
+#print("reeeeeeeeeeeeeeeeeeeeeeeee")
 
 # kek = [[[1,2,3],[2,3,4],[5,5,6]],[[1,2,3],[2,3,4],[5,5,6]],[[1,2,3],[2,3,4]]]
 # padded_kek = keras.utils.pad_sequences(kek, padding='post',maxlen=5, dtype='float32', value=0)
 # print(padded_kek)
 
 
-model = create_LSTM_softmax_network(input_shape=input_shape,num_users=num_users_softmax)
-#print(model.summary())
-optimizer = keras.optimizers.Adam(learning_rate=0.05,beta_1=0.9,beta_2=0.999,epsilon=1e-8)
-model.compile(optimizer=optimizer,loss='categorical_crossentropy',metrics=['accuracy'])
-# model.fit(x_train,y_train,epochs=200,steps_per_epoch=150,batch_size=512)
+#tf.profiler.experimental.start('logdir')
+# model = create_LSTM_softmax_network(input_shape=input_shape,num_users=num_users_softmax)
+# #print(model.summary())
+# optimizer = keras.optimizers.Adam(learning_rate=0.05,beta_1=0.9,beta_2=0.999,epsilon=1e-8)
+# model.compile(optimizer=optimizer,loss='categorical_crossentropy',metrics=['accuracy'])
+# #model.fit(x_train,y_train,epochs=200,steps_per_epoch=150,batch_size=512)
+# model.fit(x_train,y_train,epochs=200,batch_size=512)
+# #model.fit(x_train,y_train,epochs=1,steps_per_epoch=150,batch_size=512)
+# #model.save("softmax_typenet_model.keras")
+# model.save("softmax_typenet_model_dummy.keras")
+#tf.profiler.experimental.stop()
 
-model_1 , base_model = create_LSTM_triplet(input_shape=input_shape)
-print(model_1.summary())
+eastern = pytz.timezone('US/Eastern')
+fmt = '%Y-%m-%d %H:%M:%S %Z%z'
+loc_dt = datetime.datetime.now(eastern)
+print("model saved at: ",loc_dt.strftime(fmt))
 
-model_1.save("saved_model.keras")
-base_model.save("base_saved_model.keras")
+#testing verification functions
+print("testinggggg")
+for i in range(10):
+    user_galleries[i]= x_test[10*i:10*i+10]
+test_model = keras.models.load_model("softmax_typenet_model_dummy.keras")
+actual_users_list = sorted(user_galleries.keys())
+actual_users = [[i for j in range(len(user_galleries[i]))] for i in actual_users_list]
+new_actual_users = []
+for lst in actual_users:
+    new_actual_users.extend(lst)
+print(len(new_actual_users))
+actual_users = new_actual_users
+
+print(actual_users)
+alleged_users = np.random.choice(actual_users_list,size = len(actual_users),replace=True)
+print(actual_users_list)
+test_lst = actual_users[0:5]
+test_lst.extend(actual_users[10:15])
+print(compute_FPR_FNR(test_model,user_galleries[0],test_lst,threshold=1))
+#print(compute_FPR_FNR(test_model,user_galleries[0],alleged_users[0:10],threshold=1))
+
+test_dict = {}
+for user in actual_users:
+    test_dict[user] = user_galleries[user]
+alleged_users_dict = {}
+for user in actual_users:
+    alleged_users_dict[user] = test_lst
+print(compute_avg_FPR_FNR(test_model,test_dict,alleged_users_dict,threshold=0.5))
+print(compute_EER(test_model,test_dict,alleged_users_dict))
+print("testing doneeee")
 
 
-model_2 = keras.models.load_model("saved_model.keras")
-print(model_2.summary())
+# paul comment start
+# model_1 = create_LSTM_triplet(input_shape=input_shape)
+# print(model_1.summary())
+
+# model_1.save("saved_model.keras")
+
+# model_2 = keras.models.load_model("saved_model.keras")
+# print(model_2.summary())
+
+# lst = np.array([[1,2],[3,4]])
+# lst_2 = np.array([[5,6],[7,8]])
+# print(np.concatenate((lst,lst_2)))
+# paul comment end
 
 lst = np.array([[1,2],[3,4]])
 lst_2 = np.array([[5,6],[7,8]])
@@ -316,17 +375,21 @@ y = np.random.randint(low=0,high=2,size=num_users_softmax*15)  # Labels (0 for s
 #contrastive loss
 
 #batch_size = 32
-print(y)
-batch_size = 512
-pair_generator = BalancedPairGenerator(x1, x2, y, batch_size)
-print(pair_generator)
-model, base_model = create_LSTM_constrastive(input_shape=input_shape)
-model.compile(optimizer='adam', loss=contrastive_loss(margin=1.0))
-model.fit(pair_generator, epochs=30)
+# print(y)
+# #batch_size = 32
+# batch_size = 512
+# pair_generator = BalancedPairGenerator(x1, x2, y, batch_size)
+# model,base_model = create_LSTM_constrastive(input_shape=input_shape)
+# model.compile(optimizer='adam', loss=contrastive_loss(margin=1.0))
+# #model.fit(pair_generator, epochs=30)
+# model.fit(pair_generator, epochs=200)
 
-#triplet loss
-# model ,base_model = create_LSTM_triplet(input_shape=input_shape)
+# paul comment start
+# #triplet loss
+# model,base_model = create_LSTM_triplet(input_shape=input_shape)
 # model.compile(optimizer='adam',loss=triplet_loss(margin=1.0))
 # print(model.summary())
-# model.fit(x=np.array([x1,x2,x3]),y=None,epochs=200,steps_per_epoch=150,batch_size=512)
-# model.fit(x=[x1,x2,x3],y=y,epochs=200,steps_per_epoch=150,batch_size=512)
+# #model.fit(x=np.array([x1,x2,x3]),y=None,epochs=200,steps_per_epoch=150,batch_size=512)
+# #model.fit(x=[x1,x2,x3],y=y,epochs=200,steps_per_epoch=150,batch_size=512)
+# model.fit(x=[x1,x2,x3],y=y,epochs=200,batch_size=512)
+# paul comment end
