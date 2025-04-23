@@ -1,8 +1,8 @@
 import pandas as pd
 
 # === CONFIG ===
-input_file = './10k_subjects/first_10k_participants_normalized.csv'       # Replace with your actual input file
-output_file = './10k_subjects/first_10k_participants_normalized_padded.csv'   # Output file to save the result
+input_file = '../dataset_dont_commit/participants_subset_1_to_68000_normalized.csv'       # Replace with your actual input file
+output_file = '../dataset_dont_commit/participants_subset_1_to_68000_normalized_padded.csv'   # Output file to save the result
 M = 70                              # Desired sequence length
 
 # === LOAD DATA ===

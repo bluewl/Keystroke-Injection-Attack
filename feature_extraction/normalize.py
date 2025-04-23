@@ -1,7 +1,7 @@
 import pandas as pd
 
-input_file = "./10k_subjects/first_10k_participants.csv"
-output_file = "./10k_subjects/first_10k_participants_normalized.csv"
+input_file = "../dataset_dont_commit/participants_subset_1_to_68000.csv"  # Use your actual file path
+output_file = "../dataset_dont_commit/participants_subset_1_to_68000_normalized.csv"
 
 # Load the data
 df = pd.read_csv(input_file)
