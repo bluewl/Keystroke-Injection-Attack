@@ -122,9 +122,6 @@ def inject_arrows_on_trigger(seq,
 #                                           up_delay_range_ms=(80,120))
 # print(seq_rand)
 
-import numpy as np
-import random
-
 def inject_arrows_random_rate(seq,
                              rate=0.1,
                              down_delay_range_ms=(1, 30),
@@ -356,10 +353,6 @@ def inject_scroll_num_random_rate(seq,
 # Example usage:
 # seq_t = inject_scroll_num_on_trigger(seq0)
 # seq_r = inject_scroll_num_random_rate(seq0)
-
-
-import numpy as np
-import random
 
 def inject_backspace_retype(seq,
                             offset_ms_range=(1, 30),
