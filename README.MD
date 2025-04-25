@@ -1,4 +1,14 @@
-# Keystroke Injection and Extraction
+# Keystroke Injection Attack
+Key files and folders:
+ - keystroke_inject_attack.py - Keystroke Injetion Attack library that directly modifies preprocessed keystroke sequences
+ - malware_emulator folder - This folder contains all malware emulators used during the empirical analysis.
+ - keystroke_models - This folder contain codes to train and test models, and the three trained models.
+ - feature_extraction - This folder contains all the code used to extract features from the dataset collected by Dhakal et al. This folder is a bit messy.
+
+Please reach out to me if you would like to have access to the preprocessed datasets. 
+
+
+# Keystroke Event Viewer
 1. Setting up the **Chrome Browser Extension** to inject keystrokes
 2. Starting the **Web-App** that detects and stores keystrokes
 3. Running the **Feature Extraction** script
